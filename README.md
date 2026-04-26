@@ -10,10 +10,12 @@ Template uses Zabbix agent which launch powershell script
 |{$CERT.EXPIRES}|<p>Days before certificate expires</p>|30|Number|
 
 ## Prerequisites
-Place cert-check-thumb.ps1 into Zabbix Agent folder (for example C:\Program Files\Zabbix Agent 2\Script\)
-Add User Parameter to Zabbix Agent config:
+* Place cert-check-thumb.ps1 into Zabbix Agent folder (for example C:\Program Files\Zabbix Agent 2\Script\)
+* Add User Parameter to Zabbix Agent config:
+~~~
 UserParameter=CheckCert[*],powershell -NoProfile -ExecutionPolicy bypass -File "C:\Program Files\Zabbix Agent 2\Script\cert-check-thumb.ps1" $1
-Restart Zabbix Agent
+~~~
+* Restart Zabbix Agent
 
 For {$CERT.THUMB} macro you can use this powershell script with filter (2027 in this case):
 ~~~
