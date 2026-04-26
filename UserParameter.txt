@@ -1,0 +1,1 @@
+UserParameter=CheckCert[*],powershell -NoProfile -ExecutionPolicy bypass -File "C:\Program Files\Zabbix Agent 2\Script\cert-check-thumb.ps1" $1

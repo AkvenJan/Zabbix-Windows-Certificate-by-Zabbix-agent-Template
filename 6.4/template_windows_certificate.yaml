@@ -1,0 +1,81 @@
+zabbix_export:
+  version: '6.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: c7d82ab8349f42358e347c9fec91ead3
+      template: 'Windows certificate by Zabbix agent'
+      name: 'Windows certificate by Zabbix agent'
+      description: |
+        Zabbix Agent invokes powershell script to check on the specific cetrificate
+        
+        UserParameter=CheckCert[*],powershell -NoProfile -ExecutionPolicy bypass -File "C:\Program Files\Zabbix Agent 2\Script\cert-check-thumb.ps1" $1
+        
+        You need to create and place file cert-check-thumb.ps1 into the corresponding path with the content
+        $thumbprint = $args[0]
+        
+        $cert = Get-ChildItem -Path 'Cert:\LocalMachine\' -Recurse |
+                Where-Object { $_.Thumbprint -eq $thumbprint }
+        
+        if ($cert) {
+            $daysLeft = ($cert.NotAfter - (Get-Date)).Days
+            Write-Output $daysLeft
+            # Если нужно только число (для использования в других скриптах):
+            # $daysLeft
+        } else {
+            Write-Output "0"
+        }
+        
+        
+        You need to set {$CERT.THUMB} macros with the Thumbprint of the certificate you want to check
+        
+        You can find Thumbprint of the needed certificate by powershell comand for example for certificates expiring in 2027
+        
+        Get-ChildItem -Path 'Cert:\LocalMachine\' -Recurse |
+            Where-Object { !$_.PsIsContainer } | 
+            ForEach-Object {
+        
+                # use the same fields as certlm.msc
+                $issuer = '{0}' -f ([regex] 'CN=([^,]+)').Match($_.Issuer).Groups[1].Value
+                $subject = '{0}' -f ([regex] 'CN=([^,]+)').Match($_.Subject).Groups[1].Value
+        
+                [PSCustomObject]@{
+                    Store        = $_.PSParentPath.SubString($_.PSParentPath.IndexOf("::")+2)
+                    IssuedTo      = $subject.Trim(', "') #$_.Subject
+                    Expires      = $_.NotAfter
+                    Thumb        = $_.Thumbprint
+                }
+            } | Sort-Object -Property Store, IssuedTo | Select-String "2027"
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: b1081677006843899e840f5b5b634530
+          name: 'Certificate Days Left'
+          key: 'CheckCert[{$CERT.THUMB}]'
+          delay: 1d
+          trends: '0'
+          triggers:
+            - uuid: 18079cee4d4f4884becb01acee39764a
+              expression: 'last(/Windows certificate by Zabbix agent/CheckCert[{$CERT.THUMB}])<={$CERT.EXPIRES} and last(/Windows certificate by Zabbix agent/CheckCert[{$CERT.THUMB}])<>0'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Windows certificate by Zabbix agent/CheckCert[{$CERT.THUMB}])>{$CERT.EXPIRES}'
+              name: 'Cert: certificate expires soon'
+              event_name: 'Cert: certificate expires soon (less than {$CERT.EXPIRES} days)'
+              opdata: 'Days Left: {ITEM.LASTVALUE}'
+              priority: HIGH
+              manual_close: 'YES'
+            - uuid: 1abf04e4ba4b4bb496deb6ad0d396348
+              expression: 'last(/Windows certificate by Zabbix agent/CheckCert[{$CERT.THUMB}])=0'
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: 'last(/Windows certificate by Zabbix agent/CheckCert[{$CERT.THUMB}])<>0'
+              name: 'Cert {$CERT.THUMB} not found'
+              priority: HIGH
+              description: 'If macro is not set or macro with this Thumbprint is not present on the server - the alarm will trigger'
+              manual_close: 'YES'
+      macros:
+        - macro: '{$CERT.EXPIRES}'
+          value: '30'
+          description: 'Number of days before certificate expires'
+        - macro: '{$CERT.THUMB}'
+          description: 'Thumbprint of the checked certificate'
